@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ParkHere">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f5b301">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>ParkHere — 내 차 어디 세웠지?</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; }
+  body {
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    background:#f2f4f7; color:#1c2330; overflow:hidden;
+    -webkit-user-select:none; user-select:none;
+    height:100dvh; /* 모바일 브라우저 주소창을 뺀 실제 보이는 높이에 맞춤 */
+  }
+  .screen { display:none; height:100%; flex-direction:column; }
+  .screen.on { display:flex; }
+
+  /* ---------- 홈 ---------- */
+  #home { align-items:center; justify-content:center; gap:18px; padding:24px; }
+  #home h1 { font-size:34px; letter-spacing:-1px; }
+  #home h1 span { color:#f5b301; }
+  #home p.sub { color:#6b7686; margin-bottom:14px; text-align:center; line-height:1.5; }
+  .bigbtn {
+    width:100%; max-width:340px; border:0; border-radius:20px; padding:22px 24px;
+    display:flex; align-items:center; gap:16px; cursor:pointer; text-align:left;
+    background:#fff; box-shadow:0 6px 24px rgba(28,35,48,.10); transition:transform .1s;
+  }
+  .bigbtn:active { transform:scale(.97); }
+  .bigbtn .ico { font-size:34px; }
+  .bigbtn .t { font-size:19px; font-weight:700; }
+  .bigbtn .d { font-size:13px; color:#6b7686; margin-top:3px; line-height:1.4; }
+  .bigbtn.user { background:#ffd94d; background:linear-gradient(135deg,#ffdf66,#f5b301); }
+  .bigbtn.user .d { color:#7a5b00; }
+  #home .foot { font-size:12px; color:#9aa4b2; margin-top:10px; }
+
+  /* ---------- 공통 헤더 ---------- */
+  header {
+    display:flex; align-items:center; gap:10px; padding:12px 14px 8px;
+    background:#fff; box-shadow:0 1px 0 rgba(28,35,48,.07); z-index:5;
+  }
+  header .back { border:0; background:#eef1f5; border-radius:10px; width:38px; height:38px;
+    font-size:18px; cursor:pointer; flex:0 0 auto; }
+  header .title { font-weight:800; font-size:17px; flex:1 1 auto; }
+  header .title small { display:block; font-weight:500; font-size:11px; color:#8a94a4; margin-top:1px; }
+
+  .tabsrow { display:flex; gap:6px; padding:8px 14px; background:#fff; overflow-x:auto;
+    box-shadow:0 1px 0 rgba(28,35,48,.07); z-index:4; }
+  .tab { border:0; border-radius:10px; padding:8px 14px; font-size:14px; font-weight:700;
+    background:#eef1f5; color:#5b6675; cursor:pointer; white-space:nowrap; }
+  .tab.on { background:#1c2330; color:#fff; }
+  .tab.haspin::after { content:" 🚗"; }
+  .tabsrow .op { border:0; border-radius:10px; padding:8px 10px; background:#fff;
+    border:1.5px dashed #c6cdd8; color:#5b6675; font-size:13px; cursor:pointer; white-space:nowrap; }
+
+  .canvaswrap { flex:1 1 auto; position:relative; min-height:0; }
+  canvas { position:absolute; inset:0; width:100%; height:100%; touch-action:none; display:block; }
+
+  .hint { text-align:center; font-size:12px; color:#8a94a4; padding:6px 14px 10px; background:transparent; }
+
+  /* ---------- 편집 팔레트 ---------- */
+  #palette { display:flex; gap:8px; padding:10px 14px; overflow-x:auto; background:#fff;
+    box-shadow:0 -4px 16px rgba(28,35,48,.07); }
+  .tool { border:0; border-radius:14px; padding:9px 6px 7px; min-width:64px; flex:0 0 auto;
+    background:#f2f4f7; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; }
+  .tool .i { font-size:21px; }
+  .tool .n { font-size:11px; font-weight:700; color:#5b6675; }
+  .tool.on { background:#1c2330; }
+  .tool.on .n { color:#fff; }
+
+  /* ---------- 사용 모드 상태바 ---------- */
+  #statusbar { display:flex; align-items:center; gap:10px; padding:10px 14px;
+    background:#fff; box-shadow:0 -4px 16px rgba(28,35,48,.07); min-height:64px; }
+  #statusbar .msg { flex:1 1 auto; font-size:14px; line-height:1.45; }
+  #statusbar .msg b { font-size:15px; }
+  #statusbar .msg .time { color:#8a94a4; font-size:12px; }
+  #statusbar .actions { display:flex; gap:6px; flex:0 0 auto; }
+  #statusbar .actions button { border:0; border-radius:10px; padding:9px 11px; font-size:13px;
+    font-weight:700; background:#eef1f5; color:#39424f; cursor:pointer; }
+  #statusbar .actions button.warn { background:#fdecec; color:#c22e2e; }
+  #statusbar .actions button.go { background:#1c2330; color:#fff; }
+
+  /* ---------- 격자 크기 방향 선택 대화상자 ---------- */
+  #sizeDlg { position:fixed; inset:0; background:rgba(28,35,48,.45); z-index:50;
+    display:none; align-items:center; justify-content:center; }
+  #sizeDlg .card { background:#fff; border-radius:18px; padding:18px 20px; width:272px;
+    box-shadow:0 12px 40px rgba(28,35,48,.25); }
+  #sizeDlg .tt { font-weight:800; font-size:15px; margin-bottom:4px; }
+  #sizeDlg .info { font-size:12px; color:#8a94a4; margin-bottom:12px; line-height:1.5; }
+  #anchorGrid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+  #anchorGrid button { border:0; border-radius:12px; background:#eef1f5; font-size:20px;
+    padding:12px 0; cursor:pointer; }
+  #anchorGrid button:active { background:#1c2330; color:#fff; }
+  #sizeDlgCancel { margin-top:10px; width:100%; border:0; border-radius:12px; padding:10px;
+    background:#1c2330; color:#fff; font-weight:700; font-size:14px; cursor:pointer; }
+
+  #toast { position:fixed; left:50%; bottom:96px; transform:translateX(-50%) translateY(20px);
+    background:rgba(28,35,48,.92); color:#fff; padding:10px 18px; border-radius:999px;
+    font-size:14px; opacity:0; pointer-events:none; transition:all .25s; z-index:99; white-space:nowrap; }
+  #toast.on { opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ========== 첫 화면: 입장 선택 ========== -->
+<div id="home" class="screen on">
+  <h1>🅿️ Park<span>Here</span></h1>
+  <p class="sub">내 차 어디 세웠지?<br>약도를 한 번 만들어 두고, 주차할 때마다 탭 한 번.</p>
+  <button class="bigbtn user" id="goUser">
+    <span class="ico">🚗</span>
+    <span><span class="t">사용하기</span><span class="d">주차 위치 남기기 · 내 차 찾기</span></span>
+  </button>
+  <button class="bigbtn" id="goEdit">
+    <span class="ico">🛠️</span>
+    <span><span class="t">약도 편집</span><span class="d">주차장 3D 약도 만들기 · 고치기 (처음 한 번)</span></span>
+  </button>
+  <p class="foot">모든 데이터는 이 기기에만 저장됩니다</p>
+</div>
+
+<!-- ========== 편집 화면 ========== -->
+<div id="edit" class="screen">
+  <header>
+    <button class="back" data-home>←</button>
+    <div class="title">약도 편집<small>도구를 고르고 바닥 타일을 탭·드래그해서 칠하세요</small></div>
+  </header>
+  <div class="tabsrow" id="editTabs"></div>
+  <div class="canvaswrap"><canvas id="editCanvas"></canvas></div>
+  <div class="hint">드래그 = 칠하기(떼면 확정, Esc 취소) · Ctrl+Z = 되돌리기 · 주차칸 도구로 주차칸 탭 = 카스토퍼 방향 회전</div>
+  <div id="palette"></div>
+</div>
+
+<!-- ========== 사용 화면 ========== -->
+<div id="user" class="screen">
+  <header>
+    <button class="back" data-home>←</button>
+    <div class="title">내 차 찾기<small>주차 칸을 탭하면 핀 · 입구를 탭하면 그 입구 기준 경로</small></div>
+  </header>
+  <div class="tabsrow" id="userTabs"></div>
+  <div class="canvaswrap"><canvas id="userCanvas"></canvas></div>
+  <div id="statusbar"></div>
+</div>
+
+<div id="sizeDlg">
+  <div class="card">
+    <div class="tt">기존 지도를 어느 쪽에 둘까요?</div>
+    <div class="info" id="sizeDlgInfo"></div>
+    <div id="anchorGrid"></div>
+    <button id="sizeDlgCancel">취소</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* =====================================================================
+   ParkHere — 자체 완결 프로토타입
+   PRD/TRD 대응: 층별 약도(D5) · 랜드마크+차핀 1개(D4) · 로컬 저장(D1)
+   저장 계층은 MapStore 하나로 격리(= the seam)
+===================================================================== */
+
+/* ---------- 타일 종류 ---------- */
+const T = { ASPHALT:0, SPOT:1, LANE:2, GREEN:3, PILLAR:4, ENTRANCE:5, RAMP:6, PILLAR_ENT:7,
+            SPOT_E:8, SPOT_S:9, SPOT_W:10 };   // SPOT(=북)·동·남·서 = 카스토퍼가 붙은 후면 방향
+const isSpot = t => (t===T.SPOT||t===T.SPOT_E||t===T.SPOT_S||t===T.SPOT_W);
+const SPOT_NEXT = { [T.SPOT]:T.SPOT_E, [T.SPOT_E]:T.SPOT_S, [T.SPOT_S]:T.SPOT_W, [T.SPOT_W]:T.SPOT };
+const SPOT_DIRNAME = { [T.SPOT]:"북", [T.SPOT_E]:"동", [T.SPOT_S]:"남", [T.SPOT_W]:"서" };
+const TOOLS = [
+  { t:T.SPOT,     i:"🅿️", n:"주차칸" },
+  { t:T.LANE,     i:"🛣️", n:"도로"   },
+  { t:T.ENTRANCE, i:"🚪", n:"입구"   },
+  { t:T.PILLAR,   i:"🏛️", n:"기둥"   },
+  { t:T.RAMP,     i:"↗️",  n:"램프"   },
+  { t:T.GREEN,    i:"🌿", n:"화단"   },
+  { t:T.ASPHALT,  i:"🧽", n:"지우개" },
+];
+let COLS = 28, ROWS = 20;   // 기본 격자 크기 — 편집 화면 [⚙ 크기]에서 변경 가능, 저장됨
+
+/* ---------- MapStore (the seam: 저장은 여기만 안다) ---------- */
+const MapStore = {
+  KEY: "parkhere-v1",
+  load() { try { return JSON.parse(localStorage.getItem(this.KEY)); } catch(e){ return null; } },
+  save(state) { localStorage.setItem(this.KEY, JSON.stringify(state)); },
+};
+
+/* ---------- 상태 ---------- */
+let state = MapStore.load();
+if (!state) { state = seedSample(); state.cols=COLS; state.rows=ROWS; MapStore.save(state); }
+else {
+  if(state.cols) COLS=state.cols;
+  if(state.rows) ROWS=state.rows;
+  migrate(state); MapStore.save(state);
+}
+
+/* 격자 크기가 커져도 예전에 그린 지도를 그대로 보존 (모자란 칸은 빈 바닥으로 채움) */
+function migrate(st){
+  for(const f of st.floors){
+    f.grid.length = Math.min(f.grid.length, ROWS);
+    while(f.grid.length < ROWS) f.grid.push(Array(COLS).fill(T.ASPHALT));
+    for(const row of f.grid){
+      row.length = Math.min(row.length, COLS);
+      while(row.length < COLS) row.push(T.ASPHALT);
+    }
+  }
+}
+
+function newFloor(label) {
+  return { id: "f" + Math.random().toString(36).slice(2,8), label,
+           grid: Array.from({length:ROWS},()=>Array(COLS).fill(T.ASPHALT)) };
+}
+function seedSample() {
+  const f1 = newFloor("B1"), f2 = newFloor("B2");
+  for (const f of [f1,f2]) {
+    const g = f.grid;
+    for (let x=6;x<=21;x++) g[0][x]=T.GREEN;
+    for (let x=1;x<=26;x++) g[1][x]=T.SPOT;                       // 위쪽 주차 열
+    for (const y of [2,5,8,11,14,17,18]) for (let x=0;x<COLS;x++) g[y][x]=T.LANE;
+    for (const [top,bot] of [[3,4],[6,7],[9,10],[12,13],[15,16]])  // 등맞대기 섬 5개
+      for (let x=2;x<=25;x++){ g[top][x]=T.SPOT_S; g[bot][x]=T.SPOT; } // 카스토퍼는 등끼리 맞댄 쪽
+    for (const y of [0,8,13,19]) { g[y][0]=T.PILLAR; g[y][27]=T.PILLAR; }
+    g[19][13]=T.RAMP; g[19][14]=T.RAMP;                            // 층간 램프
+  }
+  f1.grid[18][27]=T.ENTRANCE; f1.grid[18][0]=T.ENTRANCE;           // 자주 쓰는 입구 2곳 (D4)
+  f2.grid[18][27]=T.ENTRANCE;
+  return { floors:[f1,f2], pin:null };
+}
+
+/* ---------- 유틸 ---------- */
+const $ = s => document.querySelector(s);
+let toastTimer;
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.classList.add("on");
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove("on"), 1800);
+}
+function timeAgo(ts) {
+  const s = (Date.now()-ts)/1000;
+  if (s < 60) return "방금 전";
+  if (s < 3600) return Math.floor(s/60)+"분 전";
+  if (s < 86400) return Math.floor(s/3600)+"시간 전";
+  if (s < 172800) return "어제";
+  return Math.floor(s/86400)+"일 전";
+}
+function floorById(id){ return state.floors.find(f=>f.id===id); }
+
+/* =====================================================================
+   아이소메트릭 렌더러 (123.png 스타일)
+===================================================================== */
+const TW = 64, TH = 32, SLAB = 16;   // 타일 폭/높이, 바닥판 두께(기준값)
+function makeView(canvas) {
+  const ctx = canvas.getContext("2d");
+  const v = { canvas, ctx, scale:1, ox:0, oy:0, zoom:1 };
+  v.fit = function() {
+    const r = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = r.width*dpr; canvas.height = r.height*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    const isoW = (COLS+ROWS)*TW/2, isoH = (COLS+ROWS)*TH/2 + SLAB + 50;
+    v.scale = Math.min(r.width/isoW, r.height/isoH)*0.98;
+    v.ox = r.width/2 - (COLS-ROWS)*(TW/4)*v.scale;
+    v.oy = (r.height - ((COLS+ROWS)*TH/2 + SLAB)*v.scale)/2 + 32*v.scale;
+    v.w = r.width; v.h = r.height;
+    v.zoom = 1;
+  };
+  v.pt = (x,y) => [ v.ox + (x-y)*(TW/2)*v.scale, v.oy + (x+y)*(TH/2)*v.scale ];
+  v.cellAt = function(px,py) {
+    const ax = (px - v.ox)/v.scale, ay = (py - v.oy)/v.scale;
+    const x = Math.floor((ax/(TW/2) + ay/(TH/2))/2), y = Math.floor((ay/(TH/2) - ax/(TW/2))/2);
+    return (x>=0 && x<COLS && y>=0 && y<ROWS) ? {x,y} : null;
+  };
+  return v;
+}
+/* 핀치/휠 줌: (px,py)를 중심으로 배율 f만큼 확대·축소 (1배로 돌아오면 화면에 다시 맞춤) */
+function zoomAt(v,px,py,f){
+  const nz=Math.min(4,Math.max(1,v.zoom*f));
+  const ff=nz/v.zoom; if(ff===1) return;
+  v.zoom=nz; v.scale*=ff;
+  v.ox=px-(px-v.ox)*ff; v.oy=py-(py-v.oy)*ff;
+  if(nz===1) v.fit();
+}
+function diamond(v,x,y,dy=0){ // 타일 네 꼭짓점 (dy: 위로 띄우기)
+  const [ax,ay]=v.pt(x,y),[bx,by]=v.pt(x+1,y),[cx,cy]=v.pt(x+1,y+1),[dx2,dy2]=v.pt(x,y+1);
+  return [[ax,ay-dy],[bx,by-dy],[cx,cy-dy],[dx2,dy2-dy]];
+}
+function poly(ctx,pts,fill,stroke,lw){
+  ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+  ctx.closePath();
+  if(fill){ ctx.fillStyle=fill; ctx.fill(); }
+  if(stroke){ ctx.strokeStyle=stroke; ctx.lineWidth=lw||1; ctx.stroke(); }
+}
+function box(v,ctx,x,y,h,top,left,right){ // 타일 위 육면체(기둥·차 몸체)
+  const lo=diamond(v,x,y,0), hi=diamond(v,x,y,h*v.scale);
+  poly(ctx,[lo[3],lo[2],hi[2],hi[3]],left);
+  poly(ctx,[lo[2],lo[1],hi[1],hi[2]],right);
+  poly(ctx,hi,top);
+}
+const TILE_FILL = {
+  [T.ASPHALT]:"#b9bdc5", [T.SPOT]:"#e2e6eb", [T.LANE]:"#a6abb3",
+  [T.GREEN]:"#7fbf6a", [T.ENTRANCE]:"#4a90d9", [T.RAMP]:"#8f959e",
+  [T.SPOT_E]:"#e2e6eb", [T.SPOT_S]:"#e2e6eb", [T.SPOT_W]:"#e2e6eb",
+};
+
+function render(v, floor, opts={}) {
+  const { pin=null, path=null, bounce=0, editing=false, startSel=null } = opts;
+  const ctx = v.ctx; ctx.clearRect(0,0,v.w,v.h);
+  const g = floor.grid;
+
+  // 바닥판(slab): 옆면 두 개 + 그림자
+  const c0=v.pt(0,0), c1=v.pt(COLS,0), c2=v.pt(COLS,ROWS), c3=v.pt(0,ROWS);
+  const s = SLAB*v.scale;
+  ctx.save(); ctx.filter="blur(6px)"; ctx.fillStyle="rgba(28,35,48,.18)";
+  ctx.beginPath(); ctx.ellipse((c1[0]+c3[0])/2,c2[1]+s+6,(c1[0]-c3[0])/2.05,18*v.scale,0,0,7); ctx.fill();
+  ctx.restore();
+  poly(ctx,[c3,c2,[c2[0],c2[1]+s],[c3[0],c3[1]+s]],"#9aa0a9");
+  poly(ctx,[c2,c1,[c1[0],c1[1]+s],[c2[0],c2[1]+s]],"#848a94");
+
+  // 바닥 타일
+  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+    const t=g[y][x], d=diamond(v,x,y);
+    poly(ctx,d,TILE_FILL[t]??TILE_FILL[T.ASPHALT],"rgba(255,255,255,.14)",1);
+    if(isSpot(t)){ // 흰 주차선 + 후면 카스토퍼
+      const cc=[(d[0][0]+d[2][0])/2,(d[0][1]+d[2][1])/2];
+      const inset=d.map(p=>[p[0]+(cc[0]-p[0])*0.14, p[1]+(cc[1]-p[1])*0.14]);
+      poly(ctx,inset,null,"#ffffff",Math.max(2.4*v.scale,1.4));
+      // 카스토퍼: 방향(북/동/남/서)에 해당하는 모서리 안쪽에 노란 바
+      const EDGE={ [T.SPOT]:[0,1], [T.SPOT_E]:[1,2], [T.SPOT_S]:[3,2], [T.SPOT_W]:[0,3] };
+      const [ia,ib]=EDGE[t], A=d[ia], B=d[ib];
+      const ax=A[0]+(cc[0]-A[0])*0.25, ay=A[1]+(cc[1]-A[1])*0.25;
+      const bx=B[0]+(cc[0]-B[0])*0.25, by=B[1]+(cc[1]-B[1])*0.25;
+      const p1x=ax+(bx-ax)*0.18, p1y=ay+(by-ay)*0.18;
+      const p2x=bx-(bx-ax)*0.18, p2y=by-(by-ay)*0.18;
+      const lw=Math.max(3.2*v.scale,2.4);
+      ctx.lineCap="round";
+      ctx.strokeStyle="#7c6420"; ctx.lineWidth=lw+1.2;   // 아래 어두운 층 = 입체감
+      ctx.beginPath(); ctx.moveTo(p1x,p1y+1); ctx.lineTo(p2x,p2y+1); ctx.stroke();
+      ctx.strokeStyle="#e8a13c"; ctx.lineWidth=lw;
+      ctx.beginPath(); ctx.moveTo(p1x,p1y); ctx.lineTo(p2x,p2y); ctx.stroke();
+      ctx.lineCap="butt";
+    }
+    if(t===T.RAMP){ // 흰 화살표
+      const cx=(d[0][0]+d[2][0])/2, cy=(d[0][1]+d[2][1])/2;
+      ctx.strokeStyle="#fff"; ctx.lineWidth=2.2*v.scale; ctx.beginPath();
+      ctx.moveTo(cx-8*v.scale,cy+5*v.scale); ctx.lineTo(cx,cy-4*v.scale); ctx.lineTo(cx+8*v.scale,cy+5*v.scale);
+      ctx.stroke();
+    }
+    if(t===T.ENTRANCE){
+      const cx=(d[0][0]+d[2][0])/2, cy=(d[0][1]+d[2][1])/2;
+      ctx.fillStyle="#fff"; ctx.font=`700 ${Math.max(10.5*v.scale,7.5)}px sans-serif`;
+      ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("입구",cx,cy);
+    }
+  }
+
+  // 선택한 출발 입구 강조 (노란 테두리)
+  if(startSel){
+    poly(ctx,diamond(v,startSel.x,startSel.y),null,"#f5b301",3*v.scale);
+  }
+
+  // 편집 모드: 격자선 살짝
+  if(editing){
+    for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++)
+      poly(ctx,diamond(v,x,y),null,"rgba(28,35,48,.08)",0.5);
+  }
+
+  // 경로 점 (빨간 점선)
+  if(path){
+    ctx.fillStyle="#e23b3b";
+    for(const [px,py] of path){
+      const d=diamond(v,px,py), cx=(d[0][0]+d[2][0])/2, cy=(d[0][1]+d[2][1])/2;
+      ctx.beginPath(); ctx.arc(cx,cy,Math.max(3.4*v.scale,2.2),0,7); ctx.fill();
+    }
+  }
+
+  // 입체 요소 — 뒤에서 앞 순서로
+  const solids=[];
+  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+    if(g[y][x]===T.PILLAR||g[y][x]===T.PILLAR_ENT) solids.push({x,y,kind:"pillar",sign:g[y][x]===T.PILLAR_ENT});
+    if(g[y][x]===T.GREEN)  solids.push({x,y,kind:"bush"});
+  }
+  if(pin && pin.floorId===floor.id) solids.push({x:pin.x,y:pin.y,kind:"car"});
+  solids.sort((a,b)=>(a.x+a.y)-(b.x+b.y));
+  for(const o of solids){
+    if(o.kind==="pillar"){
+      ctx.save(); ctx.globalAlpha=0.45;   // 반투명 기둥 — 뒤 칸이 비쳐 보임
+      box(v,ctx,o.x,o.y,30,"#e8eaee","#c2c6cd","#aeb3bc");
+      ctx.restore();
+      if(o.sign){ // 기둥 윗면 입구 표시 (경로 출발점 겸용) — 표지는 잘 보이게 진하게
+        const hi=diamond(v,o.x,o.y,30*v.scale);
+        ctx.save(); ctx.globalAlpha=0.95;
+        poly(ctx,hi,"#4a90d9");
+        const cx=(hi[0][0]+hi[2][0])/2, cy=(hi[0][1]+hi[2][1])/2;
+        ctx.fillStyle="#fff"; ctx.font=`700 ${Math.max(10*v.scale,7)}px sans-serif`;
+        ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("입구",cx,cy+0.5);
+        ctx.restore();
+      }
+    }
+    if(o.kind==="bush")   box(v,ctx,o.x,o.y,7,"#8ecf78","#6aa958","#5c9a4b");
+    if(o.kind==="car"){
+      box(v,ctx,o.x,o.y,12,"#3a4250","#242b36","#2e3543");           // 차 몸체
+      const d=diamond(v,o.x,o.y,12*v.scale);
+      const cx=(d[0][0]+d[2][0])/2, cy=(d[0][1]+d[2][1])/2;
+      // 노란 핀 (123.png 스타일)
+      const r=Math.max(15*v.scale,10), py=cy-Math.max(34*v.scale,24)+bounce;
+      ctx.fillStyle="rgba(28,35,48,.25)";
+      ctx.beginPath(); ctx.ellipse(cx,cy+2,9*v.scale,4*v.scale,0,0,7); ctx.fill();
+      ctx.fillStyle="#f5b301";
+      ctx.beginPath(); ctx.moveTo(cx,cy-2);
+      ctx.lineTo(cx-r*0.55,py+r*0.6); ctx.arc(cx,py,r,Math.PI*0.8,Math.PI*2.2);
+      ctx.lineTo(cx,cy-2); ctx.fill();
+      ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(cx,py,r*0.68,0,7); ctx.fill();
+      ctx.font=`${r*1.05}px sans-serif`; ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText("🚗",cx,py+r*0.06);
+    }
+  }
+}
+
+/* ---------- 경로 탐색: 가까운 입구 → 내 차 (BFS) ---------- */
+function findPath(floor, pin, start){
+  const g=floor.grid, walk=t=>(t===T.ASPHALT||t===T.LANE||t===T.ENTRANCE||t===T.RAMP);
+  let starts=[];
+  if(start) starts=[[start.x,start.y]];   // 사용자가 탭으로 고른 입구
+  else for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++)
+    if(g[y][x]===T.ENTRANCE||g[y][x]===T.PILLAR_ENT) starts.push([x,y]);  // 없으면 모든 입구에서 → 가장 가까운 입구가 이김
+  if(!starts.length) return null;
+  const prev={}, q=[...starts]; starts.forEach(([x,y])=>prev[x+","+y]="S");
+  while(q.length){
+    const [x,y]=q.shift();
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=x+dx, ny=y+dy;
+      if(nx<0||ny<0||nx>=COLS||ny>=ROWS) continue;
+      if(nx===pin.x&&ny===pin.y){ // 도착: 역추적
+        const path=[[nx,ny]]; let cur=x+","+y;
+        while(cur!=="S"&&prev[cur]!=="S"){ path.push(cur.split(",").map(Number)); cur=prev[cur]; }
+        path.push(cur.split(",").map(Number)); return path.reverse();
+      }
+      if(walk(g[ny][nx]) && !(nx+","+ny in prev)){ prev[nx+","+ny]=x+","+y; q.push([nx,ny]); }
+    }
+  }
+  return null;
+}
+
+/* =====================================================================
+   화면 전환 & UI
+===================================================================== */
+const editView = makeView($("#editCanvas"));
+const userView = makeView($("#userCanvas"));
+let mode="home", editIdx=0, userIdx=0, tool=T.SPOT, painting=false;
+let selStart=null;   // 사용 모드에서 탭으로 고른 출발 입구 (기기 재시작 전까지만 유지)
+let lastKey=null;    // 드래그 페인팅 중 같은 칸 중복 처리 방지
+
+function show(name){
+  mode=name;
+  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("on"));
+  $("#"+name).classList.add("on");
+  if(name==="edit"){ editView.fit(); drawEdit(); buildTabs(); }
+  if(name==="user"){
+    userView.fit();
+    if(state.pin){ const i=state.floors.findIndex(f=>f.id===state.pin.floorId); if(i>=0) userIdx=i; }
+    buildTabs(); drawUserBar();
+  }
+}
+$("#goEdit").onclick=()=>show("edit");
+$("#goUser").onclick=()=>{
+  if(!state.floors.length){ toast("먼저 약도 편집에서 지도를 만들어 주세요"); return; }
+  show("user");
+};
+document.querySelectorAll("[data-home]").forEach(b=>b.onclick=()=>show("home"));
+window.addEventListener("resize",()=>{ if(mode==="edit"){editView.fit();drawEdit();} if(mode==="user"){userView.fit();} });
+
+/* ---------- 층 탭 ---------- */
+function buildTabs(){
+  for(const [el,isEdit] of [[$("#editTabs"),true],[$("#userTabs"),false]]){
+    el.innerHTML="";
+    state.floors.forEach((f,i)=>{
+      const b=document.createElement("button");
+      b.className="tab"+(((isEdit?editIdx:userIdx)===i)?" on":"")+((state.pin&&state.pin.floorId===f.id)?" haspin":"");
+      b.textContent=f.label;
+      b.onclick=()=>{
+        if(isEdit){
+          if(editIdx===i){ const n=prompt("층 이름",f.label); if(n){snapshot(); f.label=n.trim()||f.label; persist();} }
+          editIdx=i; buildTabs(); drawEdit();
+        } else { userIdx=i; buildTabs(); drawUserBar(); }
+      };
+      el.appendChild(b);
+    });
+    if(isEdit){
+      const mk=(txt,fn)=>{ const b=document.createElement("button"); b.className="op"; b.textContent=txt; b.onclick=fn; el.appendChild(b); };
+      mk("＋ 층",()=>{ snapshot(); state.floors.push(newFloor("B"+(state.floors.length+1))); editIdx=state.floors.length-1; persist(); buildTabs(); drawEdit(); });
+      mk("⧉ 복제",()=>{ snapshot(); const src=state.floors[editIdx]; const f=newFloor(src.label+" 복사");
+        f.grid=src.grid.map(r=>[...r]); state.floors.splice(editIdx+1,0,f); editIdx++; persist(); buildTabs(); drawEdit(); toast("층을 복제했어요 — 이름을 바꿔 주세요"); });
+      mk("🧹 전체",()=>{
+        const f=state.floors[editIdx];
+        const name=(TOOLS.find(x=>x.t===tool)||{}).n||"선택한 도구";
+        if(!confirm(`"${f.label}" 층 전체를 "${name}"(으)로 채울까요?\n(Ctrl+Z로 되돌릴 수 있어요)`)) return;
+        snapshot();
+        if(state.pin && state.pin.floorId===f.id && !isSpot(tool))
+          { state.pin=null; toast("이 층에 있던 차 핀도 지워졌어요"); }
+        f.grid=Array.from({length:ROWS},()=>Array(COLS).fill(tool));
+        persist(); buildTabs(); drawEdit(); toast(`층 전체를 "${name}"(으)로 채웠어요`);
+      });
+      mk("🗑",()=>{ if(state.floors.length<=1){ toast("마지막 층은 지울 수 없어요"); return; }
+        const f=state.floors[editIdx];
+        if(!confirm(`"${f.label}" 층을 삭제할까요?`)) return;
+        snapshot();
+        if(state.pin&&state.pin.floorId===f.id){ state.pin=null; toast("이 층에 있던 차 핀도 지워졌어요"); }
+        state.floors.splice(editIdx,1); editIdx=Math.max(0,editIdx-1); persist(); buildTabs(); drawEdit(); });
+      mk("⚙ 크기",()=>{
+        const n=prompt("격자 크기 (가로x세로, 예: 28x20)\n다음 단계에서 늘어나거나 잘리는 방향을 고를 수 있어요 (Ctrl+Z 가능)", COLS+"x"+ROWS);
+        if(n===null) return;
+        const m=n.trim().toLowerCase().match(/^(\d+)\s*[x×*,]?\s*(\d+)$/);
+        if(!m){ toast("예: 28x20 형식으로 입력해 주세요"); return; }
+        const c=Math.max(6,Math.min(48,+m[1])), r=Math.max(6,Math.min(36,+m[2]));
+        if(c===COLS&&r===ROWS){ toast("지금과 같은 크기예요"); return; }
+        openSizeDlg(c,r);
+      });
+    }
+  }
+}
+function persist(){ MapStore.save(state); }
+
+/* ---------- 편집 모드 ---------- */
+const pal=$("#palette");
+TOOLS.forEach(tl=>{
+  const b=document.createElement("button");
+  b.className="tool"+(tl.t===tool?" on":"");
+  b.innerHTML=`<span class="i">${tl.i}</span><span class="n">${tl.n}</span>`;
+  b.onclick=()=>{ tool=tl.t; document.querySelectorAll(".tool").forEach(x=>x.classList.remove("on")); b.classList.add("on"); };
+  pal.appendChild(b);
+});
+/* 되돌리기(Ctrl+Z): 편집 조작 직전 상태를 스냅샷으로 쌓아두고 복원 */
+let undoStack=[];
+function snapshot(){
+  undoStack.push(JSON.stringify({floors:state.floors,pin:state.pin,editIdx,cols:COLS,rows:ROWS}));
+  if(undoStack.length>50) undoStack.shift();
+}
+function undo(){
+  if(!undoStack.length){ toast("더 되돌릴 편집이 없어요"); return; }
+  const s=JSON.parse(undoStack.pop());
+  state.floors=s.floors; state.pin=s.pin;
+  if(s.cols&&s.rows){ COLS=s.cols; ROWS=s.rows; state.cols=COLS; state.rows=ROWS; editView.fit(); }
+  editIdx=Math.min(s.editIdx,state.floors.length-1);
+  persist(); buildTabs(); drawEdit(); toast("되돌렸어요");
+}
+function resizeGrid(c,r,av,ah){
+  // av/ah = 기존 지도를 붙여둘 기준(top/center/bottom · left/center/right).
+  // 반대쪽으로 칸이 늘어나거나 잘린다.
+  snapshot();
+  const oldC=COLS, oldR=ROWS, dx=c-oldC, dy=r-oldR;
+  const ox = ah==="left"?0 : ah==="right"?dx : Math.round(dx/2);
+  const oy = av==="top"?0 : av==="bottom"?dy : Math.round(dy/2);
+  COLS=c; ROWS=r; state.cols=c; state.rows=r;
+  for(const f of state.floors){
+    const ng=Array.from({length:r},()=>Array(c).fill(T.ASPHALT));
+    for(let y=0;y<oldR;y++) for(let x=0;x<oldC;x++){
+      const nx=x+ox, ny=y+oy;
+      if(nx>=0&&nx<c&&ny>=0&&ny<r) ng[ny][nx]=f.grid[y][x];
+    }
+    f.grid=ng;
+  }
+  if(state.pin){
+    state.pin.x+=ox; state.pin.y+=oy;
+    if(state.pin.x<0||state.pin.x>=c||state.pin.y<0||state.pin.y>=r)
+      { state.pin=null; toast("잘린 영역에 있던 차 핀이 지워졌어요"); }
+  }
+  selStart=null;
+  persist(); editView.fit(); userView.fit(); buildTabs(); drawEdit();
+  toast(`격자 크기: 가로 ${c} × 세로 ${r}`);
+}
+
+/* 크기 변경 방향 선택 대화상자 */
+let pendingSize=null;
+const ANCHORS=[["↖","top","left"],["↑","top","center"],["↗","top","right"],
+               ["←","center","left"],["●","center","center"],["→","center","right"],
+               ["↙","bottom","left"],["↓","bottom","center"],["↘","bottom","right"]];
+for(const [sym,av,ah] of ANCHORS){
+  const b=document.createElement("button"); b.textContent=sym;
+  b.onclick=()=>{ const {c,r}=pendingSize; $("#sizeDlg").style.display="none"; resizeGrid(c,r,av,ah); };
+  $("#anchorGrid").appendChild(b);
+}
+$("#sizeDlgCancel").onclick=()=>$("#sizeDlg").style.display="none";
+function openSizeDlg(c,r){
+  pendingSize={c,r};
+  $("#sizeDlgInfo").textContent=`${COLS}×${ROWS} → ${c}×${r} · 화살표 쪽에 지도를 붙이고, 반대쪽으로 칸이 ${c*r>=COLS*ROWS?"늘어나요":"잘려요"}`;
+  $("#sizeDlg").style.display="flex";
+}
+
+/* 드래그 미리보기: 드래그 동안 반투명으로만 보이고, 손을 떼면 확정 · Esc면 취소 */
+const PREVIEW_FILL = { ...TILE_FILL, [T.PILLAR]:"#e8eaee", [T.PILLAR_ENT]:"#4a90d9" };
+let pending = new Map();   // "x,y" → 확정 대기 중인 새 타일값
+
+function drawEdit(){
+  render(editView,state.floors[editIdx],{editing:true,pin:state.pin});
+  if(!pending.size) return;
+  const ctx=editView.ctx;
+  ctx.save();
+  ctx.globalAlpha=0.55;
+  for(const [k,val] of pending){
+    const [x,y]=k.split(",").map(Number);
+    poly(ctx,diamond(editView,x,y),PREVIEW_FILL[val]??PREVIEW_FILL[T.ASPHALT]);
+  }
+  ctx.globalAlpha=1;
+  for(const k of pending.keys()){
+    const [x,y]=k.split(",").map(Number);
+    poly(ctx,diamond(editView,x,y),null,"#1c2330",1.2);
+  }
+  ctx.restore();
+}
+function previewAt(px,py){
+  const c=editView.cellAt(px,py); if(!c) return;
+  const k=c.x+","+c.y; if(k===lastKey) return; lastKey=k;
+  const cur=state.floors[editIdx].grid[c.y][c.x];
+  let val=tool;
+  if(tool===T.ENTRANCE && (cur===T.PILLAR||cur===T.PILLAR_ENT))
+    val = cur===T.PILLAR ? T.PILLAR_ENT : T.PILLAR;   // 기둥 윗면 입구 표시 달기/떼기
+  if(tool===T.SPOT && isSpot(cur)){ pending.delete(k); drawEdit(); return; } // 드래그는 기존 칸 방향 유지
+  if(val===cur) pending.delete(k);   // 원래대로 되돌아오면 미리보기에서 제거
+  else pending.set(k,val);
+  drawEdit();
+}
+function commitPending(){
+  painting=false;
+  if(!pending.size) return;
+  snapshot();
+  const f=state.floors[editIdx], g=f.grid;
+  for(const [k,val] of pending){
+    const [x,y]=k.split(",").map(Number);
+    if(state.pin && state.pin.floorId===f.id && state.pin.x===x && state.pin.y===y && !isSpot(val))
+      { state.pin=null; toast("차 핀이 있던 칸이라 핀을 지웠어요"); }
+    g[y][x]=val;
+  }
+  pending.clear(); persist(); drawEdit();
+}
+function cancelPending(msg){
+  painting=false; pending.clear(); drawEdit();
+  if(msg) toast(msg);
+}
+const ec=$("#editCanvas");
+let downCell=null, maybeRotate=false;   // 탭 = 카스토퍼 회전 · 드래그 = 칠하기 구분
+const ecPtrs=new Map(); let ecPinch=null;   // 두 손가락 = 핀치 줌/이동
+function ecPos(e){ const r=ec.getBoundingClientRect(); return [e.clientX-r.left, e.clientY-r.top]; }
+ec.addEventListener("pointerdown",e=>{
+  ec.setPointerCapture(e.pointerId);
+  const [px,py]=ecPos(e); ecPtrs.set(e.pointerId,[px,py]);
+  if(ecPtrs.size===2){   // 핀치 시작 — 칠하던 미리보기는 취소
+    cancelPending(); maybeRotate=false;
+    const ps=[...ecPtrs.values()];
+    ecPinch={ dist:Math.hypot(ps[0][0]-ps[1][0],ps[0][1]-ps[1][1]),
+              mx:(ps[0][0]+ps[1][0])/2, my:(ps[0][1]+ps[1][1])/2 };
+    return;
+  }
+  if(ecPtrs.size>1) return;
+  painting=true; lastKey=null;
+  downCell=editView.cellAt(px,py);
+  const cur=downCell && state.floors[editIdx].grid[downCell.y][downCell.x];
+  maybeRotate = !!(downCell && tool===T.SPOT && isSpot(cur));
+  if(!maybeRotate) previewAt(px,py);
+});
+ec.addEventListener("pointermove",e=>{
+  if(!ecPtrs.has(e.pointerId)) return;
+  const [px,py]=ecPos(e); ecPtrs.set(e.pointerId,[px,py]);
+  if(ecPinch && ecPtrs.size>=2){
+    const ps=[...ecPtrs.values()];
+    const d=Math.hypot(ps[0][0]-ps[1][0],ps[0][1]-ps[1][1]);
+    const mx=(ps[0][0]+ps[1][0])/2, my=(ps[0][1]+ps[1][1])/2;
+    if(ecPinch.dist>0) zoomAt(editView,mx,my,d/ecPinch.dist);
+    editView.ox+=mx-ecPinch.mx; editView.oy+=my-ecPinch.my;
+    ecPinch={dist:d,mx,my}; drawEdit(); return;
+  }
+  if(!painting) return;
+  if(maybeRotate){
+    const c=editView.cellAt(px,py);
+    if(c && downCell && c.x===downCell.x && c.y===downCell.y) return;
+    maybeRotate=false;   // 다른 칸으로 움직였으면 회전이 아니라 드래그
+  }
+  previewAt(px,py);
+});
+ec.addEventListener("pointerup",e=>{
+  ecPtrs.delete(e.pointerId);
+  if(ecPtrs.size<2) ecPinch=null;
+  if(ecPtrs.size>0 || !painting) return;
+  if(maybeRotate && downCell){
+    snapshot();
+    const g=state.floors[editIdx].grid;
+    g[downCell.y][downCell.x]=SPOT_NEXT[g[downCell.y][downCell.x]];
+    painting=false; maybeRotate=false; persist(); drawEdit();
+    toast("카스토퍼 방향: "+SPOT_DIRNAME[g[downCell.y][downCell.x]]+"쪽 후면");
+    return;
+  }
+  commitPending();
+});
+ec.addEventListener("pointercancel",e=>{ ecPtrs.delete(e.pointerId); if(ecPtrs.size<2) ecPinch=null; cancelPending(); });
+ec.addEventListener("wheel",e=>{ e.preventDefault();
+  const [px,py]=ecPos(e); zoomAt(editView,px,py,e.deltaY<0?1.15:1/1.15); drawEdit(); },{passive:false});
+ec.addEventListener("dblclick",()=>{ editView.fit(); drawEdit(); });
+window.addEventListener("keydown",e=>{
+  if(e.key==="Escape" && $("#sizeDlg").style.display==="flex"){ $("#sizeDlg").style.display="none"; return; }
+  if(mode!=="edit") return;
+  if(e.key==="Escape" && painting) cancelPending("편집을 취소했어요");
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="z"){
+    e.preventDefault();
+    if(pending.size){ cancelPending("칠하던 미리보기를 취소했어요"); return; }
+    undo();
+  }
+});
+
+/* ---------- 사용 모드 ---------- */
+const uc=$("#userCanvas");
+function userTap(px,py){
+  const c=userView.cellAt(px,py); if(!c) return;
+  const floor=state.floors[userIdx];
+  const t=floor.grid[c.y][c.x];
+  if(t===T.ENTRANCE||t===T.PILLAR_ENT){
+    // 입구 탭 = 그 입구 기준으로 경로 안내. 다시 탭하면 "가장 가까운 입구" 자동 모드로.
+    if(selStart && selStart.floorId===floor.id && selStart.x===c.x && selStart.y===c.y){
+      selStart=null; toast("가장 가까운 입구 기준으로 안내해요");
+    } else {
+      selStart={floorId:floor.id,x:c.x,y:c.y}; toast("이 입구에서 출발하는 경로로 안내해요");
+    }
+    return;
+  }
+  if(!isSpot(t)){ toast("주차 칸(🅿️ 흰 선 칸)을 탭해 주세요"); return; }
+  state.pin={ floorId:floor.id, x:c.x, y:c.y, note:"", placedAt:Date.now() };
+  persist(); buildTabs(); drawUserBar();
+  toast(`${floor.label}에 주차 완료! 🚗`);
+}
+/* 탭 = 마킹 · 핀치 = 줌 · (확대 중) 한 손가락 드래그 = 이동 · 더블탭 = 원래대로 */
+const ucPtrs=new Map(); let ucPinch=null, ucStart=null, ucDragged=false, ucPinched=false;
+function ucPos(e){ const r=uc.getBoundingClientRect(); return [e.clientX-r.left, e.clientY-r.top]; }
+uc.addEventListener("pointerdown",e=>{
+  uc.setPointerCapture(e.pointerId);
+  const p=ucPos(e); ucPtrs.set(e.pointerId,p);
+  if(ucPtrs.size===2){
+    ucPinched=true;
+    const ps=[...ucPtrs.values()];
+    ucPinch={ dist:Math.hypot(ps[0][0]-ps[1][0],ps[0][1]-ps[1][1]),
+              mx:(ps[0][0]+ps[1][0])/2, my:(ps[0][1]+ps[1][1])/2 };
+    return;
+  }
+  ucStart=p; ucDragged=false; ucPinched=false;
+});
+uc.addEventListener("pointermove",e=>{
+  if(!ucPtrs.has(e.pointerId)) return;
+  const p=ucPos(e), old=ucPtrs.get(e.pointerId); ucPtrs.set(e.pointerId,p);
+  if(ucPinch && ucPtrs.size>=2){
+    const ps=[...ucPtrs.values()];
+    const d=Math.hypot(ps[0][0]-ps[1][0],ps[0][1]-ps[1][1]);
+    const mx=(ps[0][0]+ps[1][0])/2, my=(ps[0][1]+ps[1][1])/2;
+    if(ucPinch.dist>0) zoomAt(userView,mx,my,d/ucPinch.dist);
+    userView.ox+=mx-ucPinch.mx; userView.oy+=my-ucPinch.my;
+    ucPinch={dist:d,mx,my}; return;
+  }
+  if(ucStart && Math.hypot(p[0]-ucStart[0],p[1]-ucStart[1])>7) ucDragged=true;
+  if(ucDragged && userView.zoom>1){ userView.ox+=p[0]-old[0]; userView.oy+=p[1]-old[1]; }
+});
+uc.addEventListener("pointerup",e=>{
+  const p=ucPos(e);
+  ucPtrs.delete(e.pointerId);
+  if(ucPtrs.size<2) ucPinch=null;
+  if(ucPtrs.size>0) return;
+  if(!ucPinched && !ucDragged && ucStart) userTap(p[0],p[1]);
+  ucStart=null; ucDragged=false; ucPinched=false;
+});
+uc.addEventListener("pointercancel",e=>{ ucPtrs.delete(e.pointerId);
+  if(ucPtrs.size<2) ucPinch=null;
+  if(!ucPtrs.size){ ucStart=null; ucDragged=false; ucPinched=false; } });
+uc.addEventListener("wheel",e=>{ e.preventDefault();
+  const [px,py]=ucPos(e); zoomAt(userView,px,py,e.deltaY<0?1.15:1/1.15); },{passive:false});
+uc.addEventListener("dblclick",()=>userView.fit());
+function drawUserBar(){
+  const bar=$("#statusbar"), pin=state.pin;
+  if(!pin){
+    bar.innerHTML=`<div class="msg">아직 주차 위치가 없어요.<br><b>주차한 칸을 탭</b>하면 노란 핀이 꽂혀요.</div>`;
+    return;
+  }
+  const f=floorById(pin.floorId), here=state.floors[userIdx].id===pin.floorId;
+  bar.innerHTML=`
+    <div class="msg"><b>🚗 ${f?f.label:"?"}층에 주차됨</b> <span class="time">· ${timeAgo(pin.placedAt)}</span>
+      ${pin.note?`<br><span class="time">📝 ${pin.note}</span>`:""}
+      ${!here&&f?`<br><span class="time">지금 보는 층과 달라요 — [차 있는 층]을 누르세요</span>`:""}</div>
+    <div class="actions">
+      ${!here&&f?`<button class="go" id="jump">차 있는 층</button>`:""}
+      <button id="memo">메모</button><button class="warn" id="clear">핀 삭제</button>
+    </div>`;
+  const j=$("#jump"); if(j) j.onclick=()=>{ userIdx=state.floors.findIndex(x=>x.id===pin.floorId); buildTabs(); drawUserBar(); };
+  $("#memo").onclick=()=>{ const n=prompt("메모 (예: B3 기둥 옆)",pin.note||""); if(n!==null){ pin.note=n.trim(); persist(); drawUserBar(); } };
+  $("#clear").onclick=()=>{ if(confirm("차 핀을 삭제할까요?")){ state.pin=null; persist(); buildTabs(); drawUserBar(); } };
+}
+
+/* ---------- 애니메이션 루프 (사용 모드: 핀 통통 + 경로) ---------- */
+let pathCache={key:"",path:null};
+function loop(t){
+  if(mode==="user"){
+    const floor=state.floors[userIdx];
+    let path=null;
+    // 고른 입구가 지워졌으면 자동 모드로 복귀
+    if(selStart){
+      const sf=floorById(selStart.floorId);
+      const st=sf&&sf.grid[selStart.y]&&sf.grid[selStart.y][selStart.x];
+      if(!sf||(st!==T.ENTRANCE&&st!==T.PILLAR_ENT)) selStart=null;
+    }
+    const start=(selStart&&selStart.floorId===floor.id)?selStart:null;
+    if(state.pin && state.pin.floorId===floor.id){
+      const key=floor.id+":"+state.pin.x+","+state.pin.y+":"+(start?start.x+","+start.y:"near")+":"+JSON.stringify(floor.grid);
+      if(pathCache.key!==key){ pathCache={key,path:findPath(floor,state.pin,start)}; }
+      path=pathCache.path;
+    }
+    render(userView,floor,{pin:state.pin,path,startSel:start,bounce:Math.sin(t/280)*4*userView.scale});
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* 오프라인 지원 (지하 주차장 = 신호 없음): https로 열렸을 때만 서비스 워커 등록 */
+if("serviceWorker" in navigator && location.protocol==="https:")
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body>
+</html>

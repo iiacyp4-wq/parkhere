@@ -1,0 +1,11 @@
+{
+  "name": "ParkHere — 내 차 어디 세웠지?",
+  "short_name": "ParkHere",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f2f4f7",
+  "theme_color": "#f5b301",
+  "icons": [
+    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}
