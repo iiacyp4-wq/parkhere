@@ -112,7 +112,7 @@
 <body>
 
 <!-- ========== 첫 화면: 입장 선택 ========== -->
-<div id="home" class="screen on">
+<div id="home" class="screen">
   <h1>🅿️ Park<span>Here</span></h1>
   <p class="sub">내 차 어디 세웠지?<br>약도를 한 번 만들어 두고, 주차할 때마다 탭 한 번.</p>
   <button class="bigbtn user" id="goUser">
@@ -143,7 +143,7 @@
 </div>
 
 <!-- ========== 사용 화면 ========== -->
-<div id="user" class="screen">
+<div id="user" class="screen on">
   <header>
     <button class="back" data-home>←</button>
     <div class="title">내 차 찾기<small>주차 칸을 탭하면 핀 · 입구를 탭하면 그 입구 기준 경로</small></div>
@@ -855,6 +855,9 @@ if(location.hash.startsWith("#m=")){
   applyImport(location.hash);
   history.replaceState(null, "", location.pathname + location.search);
 }
+
+/* 앱 실행 = 곧바로 사용 화면 (주차 직후 몇 초 안에 마킹 — PRD §4 가드레일) */
+show("user");
 
 /* 오프라인 지원 (지하 주차장 = 신호 없음): https로 열렸을 때만 서비스 워커 등록 */
 if("serviceWorker" in navigator && location.protocol==="https:")
