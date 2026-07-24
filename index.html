@@ -39,6 +39,9 @@
   .bigbtn.user { background:#ffd94d; background:linear-gradient(135deg,#ffdf66,#f5b301); }
   .bigbtn.user .d { color:#7a5b00; }
   #home .foot { font-size:12px; color:#9aa4b2; margin-top:10px; }
+  #home .mini { display:flex; gap:8px; margin-top:2px; }
+  .minibtn { border:0; border-radius:12px; padding:10px 14px; background:#e8ebf0;
+    color:#39424f; font-size:13px; font-weight:700; cursor:pointer; }
 
   /* ---------- 공통 헤더 ---------- */
   header {
@@ -120,6 +123,10 @@
     <span class="ico">🛠️</span>
     <span><span class="t">약도 편집</span><span class="d">주차장 3D 약도 만들기 · 고치기 (처음 한 번)</span></span>
   </button>
+  <div class="mini">
+    <button class="minibtn" id="exportBtn">📤 지도 보내기</button>
+    <button class="minibtn" id="importBtn">📥 지도 가져오기</button>
+  </div>
   <p class="foot">모든 데이터는 이 기기에만 저장됩니다</p>
 </div>
 
@@ -813,6 +820,41 @@ function loop(t){
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+
+/* ---------- 지도 내보내기 / 가져오기 (기기 간 이동) ---------- */
+const HOSTED = "https://iiacyp4-wq.github.io/parkhere/";
+function exportLink(){
+  const data = btoa(unescape(encodeURIComponent(JSON.stringify(state))));
+  const base = location.protocol==="https:" ? location.origin+location.pathname : HOSTED;
+  return base + "#m=" + data;
+}
+$("#exportBtn").onclick = async () => {
+  const url = exportLink();
+  try { await navigator.clipboard.writeText(url); toast("지도 링크를 복사했어요 — 폰으로 보내서 여세요"); }
+  catch(e){ prompt("아래 링크를 복사해서 폰으로 보내세요", url); }
+};
+function applyImport(s){
+  try {
+    const m = s.match(/#m=([A-Za-z0-9+/=]+)/);
+    const st = JSON.parse(decodeURIComponent(escape(atob(m ? m[1] : s))));
+    if(!st.floors || !st.floors.length) throw 0;
+    if(!confirm(`지도 ${st.floors.length}개 층을 불러올까요?\n이 기기의 기존 지도와 핀은 덮어써져요.`)) return;
+    state = st;
+    if(state.cols){ COLS = state.cols; ROWS = state.rows; }
+    migrate(state); persist();
+    editIdx = 0; userIdx = 0; selStart = null; undoStack = [];
+    buildTabs(); toast("지도를 불러왔어요! 🎉");
+  } catch(e){ toast("링크(코드)를 읽지 못했어요 — 전체를 그대로 붙여넣어 주세요"); }
+}
+$("#importBtn").onclick = () => {
+  const s = prompt("컴퓨터에서 복사한 링크를 붙여넣으세요");
+  if(s) applyImport(s.trim());
+};
+/* 링크(#m=...)로 열린 경우 자동으로 가져오기 제안 */
+if(location.hash.startsWith("#m=")){
+  applyImport(location.hash);
+  history.replaceState(null, "", location.pathname + location.search);
+}
 
 /* 오프라인 지원 (지하 주차장 = 신호 없음): https로 열렸을 때만 서비스 워커 등록 */
 if("serviceWorker" in navigator && location.protocol==="https:")
